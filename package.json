@@ -10,7 +10,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc -p tsconfig.json && npm run copy:python",
+    "build": "tsc -p tsconfig.json && pnpm run copy:python",
     "copy:python": "mkdir -p dist/http && cp src/http/cloudscraper_wrapper.py dist/http/ && cp src/http/curl_cffi_wrapper.py dist/http/ && cp requirements.txt dist/",
     "postinstall": "node scripts/check-python-deps.mjs",
     "prepublishOnly": "pnpm run build",
