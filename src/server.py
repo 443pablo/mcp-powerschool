@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 import os
+import sys
 import requests
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
+from urllib.parse import urlencode
 from fastmcp import FastMCP
 
 mcp = FastMCP("PowerSchool MCP Server")
@@ -56,16 +58,21 @@ class PowerSchoolAPI:
                 "client_secret": self.client_secret
             }
         
-        response = requests.post(auth_url, data=data)
-        response.raise_for_status()
-        
-        token_data = response.json()
-        _auth_cache["token"] = token_data["access_token"]
-        # Set expiration to 5 minutes before actual expiration for safety
-        expires_in = token_data.get("expires_in", 3600)
-        _auth_cache["expires_at"] = datetime.now() + timedelta(seconds=expires_in - 300)
-        
-        return _auth_cache["token"]
+        try:
+            response = requests.post(auth_url, data=data, timeout=30)
+            response.raise_for_status()
+            
+            token_data = response.json()
+            _auth_cache["token"] = token_data["access_token"]
+            # Set expiration to 5 minutes before actual expiration for safety
+            expires_in = token_data.get("expires_in", 3600)
+            _auth_cache["expires_at"] = datetime.now() + timedelta(seconds=expires_in - 300)
+            
+            return _auth_cache["token"]
+        except requests.exceptions.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON response from PowerSchool authentication: {e}")
+        except requests.exceptions.RequestException as e:
+            raise ConnectionError(f"Failed to authenticate with PowerSchool: {e}")
     
     def _make_request(self, endpoint: str, method: str = "GET", data: Optional[Dict] = None) -> Dict:
         """Make authenticated request to PowerSchool API"""
@@ -78,19 +85,26 @@ class PowerSchoolAPI:
         
         url = f"{self.base_url}{endpoint}"
         
-        if method == "GET":
-            response = requests.get(url, headers=headers)
-        elif method == "POST":
-            response = requests.post(url, headers=headers, json=data)
-        elif method == "PUT":
-            response = requests.put(url, headers=headers, json=data)
-        elif method == "DELETE":
-            response = requests.delete(url, headers=headers)
-        else:
-            raise ValueError(f"Unsupported HTTP method: {method}")
-        
-        response.raise_for_status()
-        return response.json()
+        try:
+            if method == "GET":
+                response = requests.get(url, headers=headers, timeout=30)
+            elif method == "POST":
+                response = requests.post(url, headers=headers, json=data, timeout=30)
+            elif method == "PUT":
+                response = requests.put(url, headers=headers, json=data, timeout=30)
+            elif method == "DELETE":
+                response = requests.delete(url, headers=headers, timeout=30)
+            else:
+                raise ValueError(f"Unsupported HTTP method: {method}")
+            
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON response from PowerSchool: {e}")
+        except requests.exceptions.Timeout:
+            raise TimeoutError("Request to PowerSchool timed out after 30 seconds")
+        except requests.exceptions.RequestException as e:
+            raise ConnectionError(f"Failed to connect to PowerSchool: {e}")
     
     def get_student_info(self) -> Dict:
         """Get current student information"""
@@ -109,13 +123,15 @@ class PowerSchoolAPI:
     def get_grade_history(self, start_date: Optional[str] = None, end_date: Optional[str] = None) -> Dict:
         """Get historical grades"""
         endpoint = "/ws/v1/student/grades/history"
-        if start_date or end_date:
-            params = []
-            if start_date:
-                params.append(f"startDate={start_date}")
-            if end_date:
-                params.append(f"endDate={end_date}")
-            endpoint += "?" + "&".join(params)
+        params = {}
+        if start_date:
+            params['startDate'] = start_date
+        if end_date:
+            params['endDate'] = end_date
+        
+        if params:
+            endpoint += "?" + urlencode(params)
+        
         return self._make_request(endpoint)
     
     def get_courses(self) -> Dict:
@@ -294,7 +310,7 @@ def get_server_info() -> dict:
         "server_name": "PowerSchool MCP Server",
         "version": "1.0.0",
         "environment": os.environ.get("ENVIRONMENT", "development"),
-        "python_version": os.sys.version.split()[0],
+        "python_version": sys.version.split()[0],
         "configuration": config_status,
         "configured": config_status["powerschool_url_set"] and config_status["client_id_set"] and config_status["client_secret_set"]
     }
