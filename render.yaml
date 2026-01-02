@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: fastmcp-server
+    name: powerschool-mcp
     runtime: python
     buildCommand: pip install -r requirements.txt
     startCommand: python src/server.py
@@ -9,3 +9,13 @@ services:
     envVars:
       - key: ENVIRONMENT
         value: production
+      - key: POWERSCHOOL_URL
+        sync: false
+      - key: POWERSCHOOL_CLIENT_ID
+        sync: false
+      - key: POWERSCHOOL_CLIENT_SECRET
+        sync: false
+      - key: POWERSCHOOL_USERNAME
+        sync: false
+      - key: POWERSCHOOL_PASSWORD
+        sync: false
